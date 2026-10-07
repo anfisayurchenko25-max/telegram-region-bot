@@ -47,6 +47,119 @@ REGIONS = {
 
 # Дополнительные действующие серии кодов
 EXTRA = {
-"02":["102","702"],"03":["103"],"09":["109"],"13":["113"],"16":["116","716"],
-"18":["118"],"21":["121"],"22":["122","222"],"23":["93","123","193","323"],
-"24":["124","224"],"25":["125","725"],"26":["
+"02":["102","702"],
+"03":["103"],
+"09":["109"],
+"13":["113"],
+"16":["116","716"],
+"18":["118"],
+"21":["121"],
+"22":["122","222"],
+"23":["93","123","193","323"],
+"24":["124","224"],
+"25":["125","725"],
+"26":["126"],
+"30":["130"],
+"31":["131"],
+"34":["134"],
+"36":["136"],
+"38":["138"],
+"39":["139"],
+"42":["142"],
+"50":["90","150","550","750","790"],
+"52":["152","252"],
+"54":["154","754"],
+"55":["155"],
+"56":["156"],
+"58":["158"],
+"59":["159"],
+"61":["161","761"],
+"63":["163","763"],
+"64":["164"],
+"66":["96","196"],
+"69":["169"],
+"72":["172"],
+"73":["173"],
+"74":["174","774"],
+"77":["97","99","177","197","199","777","797","799","977","997"],
+"78":["98","178","198","778"],
+"80":["180"],
+"81":["181"],
+"82":["182"],
+"84":["184"],
+"85":["185"],
+"86":["186"],
+"92":["192"]
+}
+
+for base, extras in EXTRA.items():
+    for code in extras:
+        REGIONS[code] = REGIONS[base]
+
+DB = "bot.db"
+
+def init_db():
+    with sqlite3.connect(DB) as db:
+        db.execute("CREATE TABLE IF NOT EXISTS chats (chat_id INTEGER PRIMARY KEY)")
+
+def add_chat(chat_id):
+    with sqlite3.connect(DB) as db:
+        db.execute("INSERT OR IGNORE INTO chats VALUES (?)", (chat_id,))
+
+def remove_chat(chat_id):
+    with sqlite3.connect(DB) as db:
+        db.execute("DELETE FROM chats WHERE chat_id=?", (chat_id,))
+
+def chats():
+    with sqlite3.connect(DB) as db:
+        return [x[0] for x in db.execute("SELECT chat_id FROM chats")]
+
+def message():
+    selected = random.sample(list(REGIONS.items()), 5)
+    return "Доброе утро! ☀️\n\n" + "\n".join(
+        f"{code} — {name}" for code, name in selected
+    )
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    add_chat(update.effective_chat.id)
+    await update.message.reply_text(
+        "Готово! 🌅\n"
+        "Каждое утро в 07:00 по Москве я буду присылать 5 случайных кодов.\n\n"
+        "/now — получить подборку сейчас\n"
+        "/stop — отключить рассылку"
+    )
+
+async def now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(message())
+
+async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    remove_chat(update.effective_chat.id)
+    await update.message.reply_text("Утренние сообщения отключены.")
+
+async def morning(context: ContextTypes.DEFAULT_TYPE):
+    text = message()
+    for chat_id in chats():
+        try:
+            await context.bot.send_message(chat_id, text)
+        except Exception as e:
+            print(e)
+
+def main():
+    init_db()
+
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("now", now))
+    app.add_handler(CommandHandler("stop", stop))
+
+    app.job_queue.run_daily(
+        morning,
+        time=time(7, 0, tzinfo=TZ)
+    )
+
+    print("Bot started")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
