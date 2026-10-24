@@ -1,26 +1,17 @@
 import os
 import random
 import sqlite3
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
     MessageHandler,
-    CallbackQueryHandler,
     filters,
 )
 
 TOKEN = os.environ["BOT_TOKEN"]
-TZ = ZoneInfo("Europe/Moscow")
 DB = "bot.db"
 
 REGIONS = {
@@ -166,527 +157,551 @@ for base, extras in EXTRA.items():
     for code in extras:
         REGIONS[code] = REGIONS[base]
 
+UNIQUE_REGIONS = sorted(set(REGIONS.values()))
+
+CODES_BY_REGION = {
+    name: sorted(
+        code for code, region in REGIONS.items()
+        if region == name
+    )
+    for name in UNIQUE_REGIONS
+}
+
+WISHES = [
+    "Привет, маленький волшебный котенок 😽\n"
+    "Надеюсь, ты хорошо выспался)\n"
+    "Давай поиграем?",
+
+    "Доброе утро, Манул Костя💦\n"
+    "Ты уже умыл свою мордочку?🧖‍♂️ Нам надо с тобой поиграть)",
+
+    "Кто самый красивый мальчик? Ашрафуль? Пашулик-шуршулик? "
+    "А может быть Арсюша-писюша??\n"
+    "Нет, это же волшебный котенок!!!🫂 Начинаем?)",
+
+    "Мяу-мяу, мур-мур🥰 Вам надо все отгадать)",
+
+    "Так-так-так Котенок💗\n"
+    "Так-так-так Котенок\n"
+    "Выспанный Котенок тут у нас",
+
+    "Ушастик, доброе утро☺️",
+
+    "У него глазаа лазури бирюзааа, ресницы хлоп-хлоп-хлоп👀\n"
+    "Я смотрю на зад, хочу тебе скааазать, он у тебя\n"
+    "топ-топ-топ👅\nДоброе утро💚",
+
+    "Грязным может быть только Ден! Беги скорее мыть попу "
+    "и давай играть😁\nДоброе утро💚",
+
+    "Это симплл плейс!\nОй, или сикрет?...\n"
+    "Неважно) главное угадать все номера регионов\n"
+    "Доброе утро💚",
+
+    "Ах, пушистик, пушистик) желаю тебе хорошего дня\n"
+    "Доброе утро💚",
+
+    "Дикими зверями не рождаются, ими становятся "
+    "если рядом есть Дикая Ласка😚\nДоброе утро💚",
+
+    "Как говорил великий мудрец:\n"
+    "《А 10 вы занимаетесь? Аа, точно вы же 11, 12. "
+    "Братское сердце, будь другом заблокируй мне пару автокоманд》\n\n"
+    "Доброе утро💚",
+
+    "Настало время выдернуть свой седой волос из бороды "
+    "и загадать желание😇\nДоброе утро💚",
+
+    "Сигареты? алкоголь? Вкусная еда?\n\nНет!!\n"
+    "Самое офигенное занятие это еб*ашить после работы 4 км "
+    "по лесу в 30градусную жару и влажность 90%, стараясь "
+    "не попасться под палку сумасшедшему слепому деду 😋\n\n"
+    "Доброе утро💚",
+
+    "Ты не забыл надеть свою хиросиму нагасаки для того "
+    "чтобы спина была ровная??\nДоброе утро💚",
+
+    "Дари добро и позитив, не забудь сказать главное "
+    "《Джем блть, фу нхй!!!》\nДоброе утро💚",
+
+    "Доброе утро! Пусть день будет прекрасным 🌷",
+    "Солнечного утра и лёгкого дня ☀️",
+    "Пусть утро начнётся с улыбки 😊",
+    "Доброе утро! Пусть всё получится 💛",
+    "Тепла, уюта и хорошего настроения 🌸",
+    "Пусть сегодня всё складывается удачно 🍀",
+    "Доброе утро! Больше поводов для радости ✨",
+    "Пусть день принесёт приятные сюрпризы 🎁",
+    "Просыпайся с улыбкой и верой в лучшее 🌞",
+    "Чудесного утра и добрых новостей 💌",
+    "Пусть кофе будет вкусным, а день лёгким ☕",
+    "Улыбнись новому дню! Он обещает быть хорошим 🌈",
+    "Доброе утро! Пусть душа поёт 🎶",
+    "Желаю проснуться счастливым человеком 💕",
+    "Пусть сегодня будет много света и тепла 🧡",
+    "Самого доброго и уютного утра 🐻",
+    "Пусть утро подарит вдохновение 🌺",
+    "Хорошего пробуждения и отличного настроения 💫",
+    "Пусть день начнётся с приятных мелочей 🌼",
+    "Доброе утро! Обнимаю мысленно 🤗",
+    "Пусть сегодняшний рассвет принесёт надежду 🌅",
+    "Лёгкого подъёма и прекрасного дня 🌻",
+    "Пусть с утра всё радует глаз и сердце 💖",
+    "Желаю бодрости, сил и улыбок 🌞",
+    "Пусть этот день будет к тебе добр 💐",
+    "Доброе утро! Впереди много хорошего 🌟",
+    "Пусть утро будет нежным, как объятия 🫶",
+    "Желаю начать день с хорошей мысли 💭",
+    "Пусть сегодня счастье найдёт тебя само 🍀",
+    "Светлого утра и приятных встреч 🌷",
+    "Доброе утро! Пусть сердце будет спокойно 🕊️",
+    "Пусть день подарит маленькое чудо ✨",
+    "Желаю проснуться с лёгкостью на душе 🩷",
+    "Пусть утреннее солнце зарядит энергией ☀️",
+    "Хорошего утра и побольше поводов смеяться 😄",
+    "Пусть сегодня всё идёт по плану 📝",
+    "Доброе утро! Пусть рядом будут хорошие люди 💕",
+    "Желаю ароматного кофе и добрых мыслей ☕",
+    "Пусть день начнётся красиво 🌸",
+    "С добрым утром! Береги свою улыбку 😊",
+    "Прекрасного дня и чудесного настроения 🌈",
+    "Пусть сегодня всё удаётся легко 🍀",
+    "Хорошего дня, полного приятных моментов 💛",
+    "Желаю побольше улыбок и поменьше забот 😊",
+    "Пусть день принесёт только хорошие эмоции 🌷",
+    "Удачи во всём и гармонии внутри 🕊️",
+    "Пусть каждый час радует чем-то приятным ✨",
+    "Отличного дня и душевного тепла 🧡",
+    "Желаю лёгкости в делах и радости в сердце 🌞",
+    "Пусть сегодня всё будет именно так, как хочется 💫",
+    "Хорошего дня! Пусть всё сложится 🌺",
+    "Больше радости, меньше суеты 🌿",
+    "Пусть удача сегодня будет рядом 🍀",
+    "Желаю чудесного настроения на весь день 💕",
+    "Пусть день будет ярким и запоминающимся 🌈",
+    "Только добрых новостей и приятных встреч 💌",
+    "Пусть всё задуманное получится 💪",
+    "Продуктивного дня и заслуженного отдыха вечером 🌻",
+    "Желаю провести день с удовольствием 🌸",
+    "Пусть хорошее настроение не заканчивается 😍",
+    "Пусть сегодня найдётся время для себя 🩷",
+    "Улыбок тебе на каждом шагу 😄",
+    "Желаю мира в душе и порядка в делах 🌿",
+    "Пусть день приятно удивит 🎁",
+    "Больше света, тепла и доброты ☀️",
+    "Пусть все трудности окажутся мелочами 💪",
+    "Приятного дня и лёгких решений 🌷",
+    "Желаю побольше счастливых совпадений ✨",
+    "Пусть сегодня будет за что сказать спасибо 💖",
+    "Пусть каждый момент приносит радость 🌼",
+    "Хорошего дня и исполнения маленьких желаний 🫶",
+    "Желаю уверенности и вдохновения 🌟",
+    "Пусть всё сложное станет простым 💫",
+    "Отличного дня без лишних переживаний 🕊️",
+    "Пусть тебя окружают добрые люди 🤗",
+    "Желаю провести день на позитиве 😎",
+    "Пусть впереди ждёт что-то прекрасное 🌅",
+    "Больше поводов гордиться собой 💛",
+    "Пусть день будет щедрым на радости 🎉",
+    "Желаю лёгкого дня и тёплого вечера 🌇",
+    "Пусть сегодня тебе будет особенно хорошо 🩷",
+    "Желаю тепла, которого хватает надолго 🤗",
+    "Пусть душа отдыхает, а сердце улыбается 🌸",
+    "Береги себя и не забывай радоваться мелочам 💕",
+    "Пусть жизнь сегодня обнимет тебя нежно 🫶",
+    "Желаю спокойствия и приятных мыслей 🕊️",
+    "Пусть рядом окажется тот, кто поднимет настроение 💗",
+    "Пусть сегодняшний день будет мягким и добрым 🌷",
+    "Желаю почувствовать себя по-настоящему счастливым ✨",
+    "Пусть сердце наполнится светом 💛",
+    "Желаю нежности в словах и тепла в поступках 🌺",
+    "Пусть сегодня никто не омрачит твою улыбку 😊",
+    "Желаю душевного комфорта и внутреннего мира 🌿",
+    "Пусть хорошие мысли станут реальностью 💫",
+    "Пусть сегодня тебя ждёт что-то очень приятное 🎁",
+    "Желаю заботы, внимания и искренности 💌",
+    "Пусть день подарит ощущение, что всё хорошо 🩷",
+    "Желаю побольше моментов, от которых тепло внутри 🌞",
+    "Пусть тревоги отступят, а надежда останется 🌈",
+    "Пусть сегодня будет спокойно и радостно 🕊️",
+    "Желаю чувствовать себя нужным и любимым 💖",
+    "Пусть доброта возвращается к тебе сторицей 🌼",
+    "Желаю мягкого дня без лишних волнений 🌸",
+    "Пусть мир вокруг будет чуточку добрее 🧡",
+    "Пусть сегодня найдётся повод улыбнуться от души 😊",
+    "Желаю приятного общения и искренних разговоров 💬",
+    "Пусть каждый час приносит душевное тепло ☀️",
+    "Желаю побольше объятий, даже виртуальных 🤗",
+    "Пусть сегодняшний день оставит светлый след 💕",
+    "Желаю, чтобы всё тревожное стало легче 🌿",
+    "Пусть в душе расцветает весна 🌷",
+    "Желаю маленького счастья в каждом мгновении 🦋",
+    "Пусть сегодня тебя радует даже тишина 🕯️",
+    "Желаю добрых слов и счастливых встреч 💐",
+    "Пусть этот день подарит душевное равновесие 🩵",
+    "Желаю чувствовать себя на своём месте 🌟",
+    "Пусть жизнь чаще радует неожиданными подарками 🎀",
+    "Желаю нежного настроения и светлых мыслей 🌸",
+    "Пусть сегодня будет больше любви, чем забот 💗",
+    "Желаю просто хорошего дня — от всего сердца ❤️",
+    "Пусть удача сегодня ходит за тобой по пятам 🍀",
+    "Энергии, сил и уверенности в себе 💪",
+    "Желаю успешного дня и отличных результатов 🎯",
+    "Пусть все задачи решаются без усилий ✨",
+    "Смело иди навстречу своим целям 🚀",
+    "Пусть сегодня откроются новые возможности 🌟",
+    "Удачного дня и правильных решений 💼",
+    "Желаю успеха во всех начинаниях 🏆",
+    "Пусть всё задуманное приблизит тебя к мечте 🌈",
+    "Бодрости, решительности и отличных идей 💡",
+    "Пусть сегодня тебе во всём везёт 🎲",
+    "Желаю продуктивности без переутомления 🌿",
+    "Пусть работа спорится, а отдых радует ☕",
+    "Уверенности в каждом шаге 👣",
+    "Пусть твои старания принесут прекрасные плоды 🌱",
+    "Желаю побед даже в маленьких делах 🥇",
+    "Пусть сложные вопросы решаются быстро 🧩",
+    "Отличного настроя и мощного заряда энергии ⚡",
+    "Пусть день принесёт хорошие результаты 📈",
+    "Желаю смелости для новых свершений 🔥",
+    "Пусть нужные двери открываются вовремя 🚪",
+    "Удачи в делах и гармонии в жизни ⚖️",
+    "Пусть вдохновение сопровождает тебя весь день 🎨",
+    "Желаю ясных мыслей и верных решений 🧠",
+    "Пусть всё получится лучше, чем ожидалось 🌟",
+    "Желаю сил на важное и времени на приятное ⏳",
+    "Пусть сегодня появится повод собой гордиться 💪",
+    "Только вперёд — к новым возможностям 🚀",
+    "Желаю уверенно справиться со всеми делами 🌞",
+    "Пусть этот день станет шагом к большой мечте 🌠",
+    "Больше солнца внутри и снаружи ☀️",
+    "Пусть день будет в радость 💛",
+    "Улыбайся чаще! 😊",
+    "Пусть всё будет хорошо 🌷",
+    "Счастья в каждом мгновении 🦋",
+    "Лови приятные моменты ✨",
+    "Сегодня твой день! 🎉",
+    "Пусть добро побеждает 🕊️",
+    "Радости без повода 💕",
+    "Пусть мечты становятся ближе 🌠",
+    "Больше улыбок, меньше забот 🌼",
+    "Пусть день сияет яркими красками 🎨",
+    "Счастливого дня и лёгкого сердца 🩷",
+    "Живи сегодня с удовольствием 🌞",
+    "Пусть всё радует! 🌸",
+    "Хороших людей на твоём пути 🤗",
+    "Пусть счастье будет в мелочах 🍀",
+    "Больше света и позитива ✨",
+    "Пусть день удивит приятно 🎁",
+    "Вдохновения и хороших новостей 💌",
+    "Пусть улыбка станет привычкой 😊",
+    "Желаю ярких впечатлений 🌈",
+    "Пусть сегодня повезёт вдвойне 🍀",
+    "Хорошего настроения без причины 💖",
+    "Пусть каждый миг будет особенным 🌺",
+    "Лови волну позитива 🌊",
+    "Пусть радость найдёт тебя сама 🦋",
+    "Желаю дня без неприятных сюрпризов 🌿",
+    "Пусть сегодня всё будет по любви ❤️",
+    "Больше поводов сказать «как хорошо!» 😍",
+    "Пусть день будет вкусным, как любимый десерт 🍰",
+    "Желаю, чтобы проблемы сегодня взяли выходной 😄",
+    "Пусть удача постучится и не уйдёт 🚪",
+    "Желаю дня, который захочется повторить 🎬",
+    "Пусть вселенная подкинет что-нибудь приятное 🌌",
+    "Желаю побольше «вау» и поменьше «ой» 😁",
+    "Пусть день сложится, как идеальный пазл 🧩",
+    "Желаю, чтобы всё шло как по маслу 🧈",
+    "Пусть сегодня жизнь подмигнёт тебе 😉",
+    "Желаю приятных совпадений на каждом шагу 🎯",
+    "Пусть день будет маленьким праздником 🎊",
+    "Желаю побольше поводов для спонтанного счастья 💃",
+    "Пусть настроение будет выше облаков ☁️",
+    "Желаю, чтобы заботы растворились, как сахар в чае 🍵",
+    "Пусть сегодня всё получается с первой попытки 🎯",
+    "Желаю дня с эффектом «вот это повезло!» 🤩",
+    "Пусть хорошее настроение будет заразительным 😄",
+    "Желаю приятных неожиданностей и счастливых случайностей 🎀",
+    "Пусть сегодняшний день оставит послевкусие счастья 🍓",
+    "Доброе утро! Пусть жизнь сегодня тебя побалует 💝",
+    "Вставай! Кофе уже заждался своего героя ☕😎",
+    "Доброе утро! Желаю бодрости, даже если организм против 🐅",
+    "Пусть день будет добрым, а начальник — не слюнявяй 😁",
+    "Просыпайся! Подушка не убежит, а дела уже нервничают",
+    "Доброе утро! Желаю сегодня быть умнее своих будильников ⏰",
+    "Пусть кофе будет крепким, а проблемы — слабенькими ☕😜",
+    "С добрым утром! Улыбнись, даже если это пока судорога 😆",
+    "Доброе утро! Пусть твоя энергия проснётся раньше тебя 😇",
+    "Вставай! У вселенной на тебя какие-то планы 🌍",
+    "Доброе утро! Желаю выглядеть на миллион, а заработать два 🎆",
+    "Желаю тебе сегодня зарплату миллионера и расходы пенсионера 💸",
+    "Доброе утро! Пусть мозг загрузит последний бекап без ошибок 🧠",
+    "С добрым утром! Пусть всё получается с первого раза, даже открыть глаза 😴",
+    "Просыпайся! Жизнь прекрасна, особенно после чашки кофе ☕",
+    "С добрым утром! Пусть все неприятности перепутают твой адрес 🏡",
+    "Желаю, чтобы будильник сегодня извинился за своё поведение ⏰",
+    "Желаю побольше поводов смеяться и поменьше поводов гуглить симптомы 🔍",
+    "Доброе утро! Пусть удача липнет к тебе сильнее, чем одеяло 🛌",
+    "Пусть сегодня всё будет прекрасно, а если нет, пусть хотя бы будет весело ☀️",
+    "Доброе утро! Пусть везёт, а всё плохое подождёт 😎🍀",
+    "Просыпайся, улыбнись — и к успеху потянись! ☀️",
+    "Пусть с утра всё будет гладко, а весь день — сплошная сладость 🍯",
+    "Пусть кофе бодрит, кошелёк не грустит, а АУП сегодня молчит ☕🤫",
+    "С добрым утром! Пусть твой день идёт на взлёт, а не наоборот 🚀",
+    "Пусть удача не зевает и за тобой весь день шагает 🍀",
+    "Утро доброе встречай, всех проблем не замечай! 😜",
+    "Пусть с утра не будет драм — только кофе по губам ☕",
+    "Желаю денежного дождя, но чтоб без молнии и грома 💸🌧️",
+    "Пусть сегодня всё свершится, а плохое испарится! ✨",
+    "Желаю счастья до ушей и новостей лишь хорошей! 😁",
+    "Проснись, потянись, в прекрасный день влюбись! 🥰",
+    "С утра настройся на успех — сегодня ты круче всех! 😎",
+    "Желаю, чтобы день удался, а ты ни разу не устал… ну хотя бы почти🐈",
+    "Пусть кофе льётся, счастье множится, а всё плохое не тревожится ☕💖",
+]
+
+WISHES = list(dict.fromkeys(WISHES))
+
 MENU = ReplyKeyboardMarkup(
     [
-        ["🎲 Случайные 5", "🔎 Найти код"],
-        ["📋 Все коды", "🧠 Викторина"],
-        ["📊 Статистика", "⏰ Настроить время"],
+        ["Мяу-Мяу!!!"],
+        ["📋 Все коды", "🔎 Найти код"],
+        ["❌ Закончить игру"],
     ],
     resize_keyboard=True,
 )
 
+
 def db():
     return sqlite3.connect(DB)
+
 
 def init_db():
     with db() as con:
         con.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                chat_id INTEGER PRIMARY KEY,
-                morning_enabled INTEGER DEFAULT 1,
-                morning_hour INTEGER DEFAULT 7,
-                morning_minute INTEGER DEFAULT 0,
-                quiz_total INTEGER DEFAULT 0,
-                quiz_correct INTEGER DEFAULT 0,
-                quiz_streak INTEGER DEFAULT 0,
-                best_streak INTEGER DEFAULT 0
+                chat_id INTEGER PRIMARY KEY
             )
         """)
+
 
 def add_user(chat_id):
     with db() as con:
         con.execute(
             "INSERT OR IGNORE INTO users(chat_id) VALUES (?)",
-            (chat_id,)
+            (chat_id,),
         )
 
-def get_user(chat_id):
-    with db() as con:
-        return con.execute(
-            "SELECT * FROM users WHERE chat_id=?",
-            (chat_id,)
-        ).fetchone()
-
-def set_morning(chat_id, enabled=None, hour=None, minute=None):
-    add_user(chat_id)
-
-    with db() as con:
-        if enabled is not None:
-            con.execute(
-                "UPDATE users SET morning_enabled=? WHERE chat_id=?",
-                (int(enabled), chat_id)
-            )
-
-        if hour is not None:
-            con.execute(
-                "UPDATE users SET morning_hour=? WHERE chat_id=?",
-                (hour, chat_id)
-            )
-
-        if minute is not None:
-            con.execute(
-                "UPDATE users SET morning_minute=? WHERE chat_id=?",
-                (minute, chat_id)
-            )
-
-def users_for_time(hour, minute):
-    with db() as con:
-        return [
-            row[0]
-            for row in con.execute(
-                """
-                SELECT chat_id
-                FROM users
-                WHERE morning_enabled=1
-                AND morning_hour=?
-                AND morning_minute=?
-                """,
-                (hour, minute)
-            )
-        ]
-
-def update_stats(chat_id, correct):
-    add_user(chat_id)
-
-    with db() as con:
-        row = con.execute(
-            """
-            SELECT quiz_total, quiz_correct, quiz_streak, best_streak
-            FROM users
-            WHERE chat_id=?
-            """,
-            (chat_id,)
-        ).fetchone()
-
-        total, good, streak, best = row
-
-        total += 1
-
-        if correct:
-            good += 1
-            streak += 1
-            best = max(best, streak)
-        else:
-            streak = 0
-
-        con.execute(
-            """
-            UPDATE users
-            SET quiz_total=?,
-                quiz_correct=?,
-                quiz_streak=?,
-                best_streak=?
-            WHERE chat_id=?
-            """,
-            (total, good, streak, best, chat_id)
-        )
-
-        return total, good, streak, best
-
-def random_message():
-    selected = random.sample(list(REGIONS.items()), 5)
-
-    return (
-        "Доброе утро! ☀️\n\n"
-        + "\n".join(
-            f"{code} — {name}"
-            for code, name in selected
-        )
-    )
 
 def all_codes_text():
-    items = sorted(
-        REGIONS.items(),
-        key=lambda x: (len(x[0]), x[0])
+    items = sorted(REGIONS.items(), key=lambda x: (len(x[0]), x[0]))
+    return "📋 Все коды регионов:\n\n" + "\n".join(
+        f"{code} — {name}" for code, name in items
     )
 
-    return (
-        "📋 Коды регионов:\n\n"
-        + "\n".join(
-            f"{code} — {name}"
-            for code, name in items
-        )
-    )
-
-def find_code(code):
-    code = code.strip().upper()
-
-    if code in REGIONS:
-        return f"🔎 {code} — {REGIONS[code]}"
-
-    return "❌ Такой код не найден в базе."
-
-def quiz_keyboard(options):
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                option,
-                callback_data=f"quiz:{option}"
-            )
-        ]
-        for option in options
-    ])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     add_user(update.effective_chat.id)
-
+    context.user_data.pop("game_regions", None)
+    context.user_data["waiting_code"] = False
     await update.message.reply_text(
-        "Готово! 🌅\n\n"
-        "Я буду присылать утреннюю подборку в выбранное время.\n\n"
-        "Также здесь есть поиск кодов, список, "
-        "викторина и статистика.",
+        "Мяу-Мяу?🐈",
         reply_markup=MENU,
     )
 
-async def now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    add_user(update.effective_chat.id)
+
+async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    names = random.sample(UNIQUE_REGIONS, 10)
+    context.user_data["game_regions"] = names
+    context.user_data["game_correct"] = 0
+    context.user_data["game_current"] = None
+    context.user_data["waiting_code"] = False
 
     await update.message.reply_text(
-        random_message(),
+        "Мяу-Мяу!!! 🐈💗\n\n"
+        "Угадай коды 10 регионов. Я буду показывать название, "
+        "а ты отправляй код сообщением.\n"
+        "Можно писать любой действующий код этого региона, "
+        "в том числе дополнительный.\n\n"
+        "Начинаем!"
+    )
+
+    await ask_next_region(update, context)
+
+
+async def ask_next_region(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    names = context.user_data.get("game_regions", [])
+    correct = context.user_data.get("game_correct", 0)
+
+    if correct >= 10 or not names:
+        await finish_game(update, context)
+        return
+
+    name = names.pop(0)
+    context.user_data["game_regions"] = names
+    context.user_data["game_current"] = name
+    context.user_data["waiting_code"] = True
+
+    await update.effective_message.reply_text(
+        f"🐾 Регион {correct + 1}/10:\n\n"
+        f"{name}\n\nНапиши его код."
+    )
+
+
+async def finish_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["waiting_code"] = False
+    context.user_data.pop("game_current", None)
+    context.user_data.pop("game_regions", None)
+
+    previous = context.user_data.get("used_wishes", [])
+    available = [wish for wish in WISHES if wish not in previous]
+
+    if not available:
+        previous = []
+        available = WISHES[:]
+
+    wish = random.choice(available)
+    previous.append(wish)
+    context.user_data["used_wishes"] = previous
+
+    await update.effective_message.reply_text(
+        "🎉 Мур-р-р! Все 10 регионов угаданы!\n\n" + wish,
         reply_markup=MENU,
     )
 
-async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    set_morning(
-        update.effective_chat.id,
-        enabled=False
-    )
 
-    await update.message.reply_text(
-        "Утренняя рассылка отключена. 🔕\n\n"
-        "Нажми «⏰ Настроить время», "
-        "чтобы включить её снова.",
-        reply_markup=MENU,
-    )
+async def handle_code_guess(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    guess: str,
+):
+    region = context.user_data.get("game_current")
+
+    if not region:
+        return
+
+    guess = guess.strip().upper()
+
+    if guess in REGIONS and REGIONS[guess] == region:
+        correct = context.user_data.get("game_correct", 0) + 1
+        context.user_data["game_correct"] = correct
+        context.user_data.pop("game_current", None)
+
+        await update.message.reply_text(
+            f"✅ Правильно, котёнок! {guess} — {region}\n"
+            f"Угадано: {correct}/10 🐈"
+        )
+
+        await ask_next_region(update, context)
+    else:
+        await update.message.reply_text(
+            "Пока не угадал 🙀 Попробуй ещё раз!\n"
+            "Подсказка: проверь номер. Можно использовать "
+            "один из кодов этого региона."
+        )
+
 
 async def code_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
-            "Напиши код после команды.\n\n"
-            "Например: /code 37"
+            "Напиши код после команды, например: /code 37"
         )
         return
 
-    await update.message.reply_text(
-        find_code(context.args[0]),
-        reply_markup=MENU,
-    )
+    code = context.args[0].strip()
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    row = get_user(update.effective_chat.id)
-
-    if not row:
-        add_user(update.effective_chat.id)
-        row = get_user(update.effective_chat.id)
-
-    (
-        _,
-        enabled,
-        hour,
-        minute,
-        total,
-        good,
-        streak,
-        best,
-    ) = row
-
-    percent = round(good / total * 100) if total else 0
-
-    status = (
-        f"{hour:02d}:{minute:02d}"
-        if enabled
-        else "выключена"
-    )
-
-    await update.message.reply_text(
-        f"📊 Твоя статистика\n\n"
-        f"Ответов: {total}\n"
-        f"Правильных: {good}\n"
-        f"Точность: {percent}%\n"
-        f"Текущая серия: {streak}\n"
-        f"Лучшая серия: {best}\n\n"
-        f"🌅 Рассылка: {status}",
-        reply_markup=MENU,
-    )
-
-async def time_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "07:00",
-                callback_data="time:7:0"
-            ),
-            InlineKeyboardButton(
-                "08:00",
-                callback_data="time:8:0"
-            ),
-            InlineKeyboardButton(
-                "09:00",
-                callback_data="time:9:0"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "10:00",
-                callback_data="time:10:0"
-            ),
-            InlineKeyboardButton(
-                "18:00",
-                callback_data="time:18:0"
-            ),
-            InlineKeyboardButton(
-                "🔕 Выключить",
-                callback_data="time:off"
-            ),
-        ],
-    ])
-
-    await update.message.reply_text(
-        "⏰ Выбери время утренней рассылки по Москве:",
-        reply_markup=keyboard,
-    )
-
-def new_quiz(context):
-    correct_code, correct_name = random.choice(
-        list(REGIONS.items())
-    )
-
-    distractors = random.sample(
-        [
-            name
-            for code, name in REGIONS.items()
-            if code != correct_code
-        ],
-        3,
-    )
-
-    options = [correct_name] + distractors
-    random.shuffle(options)
-
-    context.user_data["quiz_correct"] = correct_name
-
-    return correct_code, options
-
-async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    code, options = new_quiz(context)
-
-    await update.message.reply_text(
-        f"🧠 Викторина!\n\n"
-        f"Какому региону соответствует код {code}?",
-        reply_markup=quiz_keyboard(options),
-    )
-
-async def quiz_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-
-    await query.answer()
-
-    chosen = query.data.split(":", 1)[1]
-    correct = context.user_data.get("quiz_correct")
-
-    if not correct:
-        await query.edit_message_text(
-            "Начни новую викторину кнопкой «🧠 Викторина»."
-        )
-        return
-
-    is_correct = chosen == correct
-
-    total, good, streak, best = update_stats(
-        query.message.chat_id,
-        is_correct,
-    )
-
-    if is_correct:
-        text = (
-            f"✅ Правильно!\n\n"
-            f"{correct}\n\n"
-            f"🔥 Серия: {streak}"
+    if code in REGIONS:
+        await update.message.reply_text(
+            f"🔎 {code} — {REGIONS[code]}",
+            reply_markup=MENU,
         )
     else:
-        text = (
-            f"❌ Неправильно.\n\n"
-            f"Правильный ответ: {correct}\n\n"
-            f"Серия сброшена.\n"
-            f"Всего правильных: {good}/{total}"
+        await update.message.reply_text(
+            "❌ Такой код не найден в базе.",
+            reply_markup=MENU,
         )
 
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "➡️ Следующий вопрос",
-                callback_data="quiz_next"
-            )
-        ]
-    ])
-
-    context.user_data.pop("quiz_correct", None)
-
-    await query.edit_message_text(
-        text,
-        reply_markup=keyboard,
-    )
-
-async def quiz_next(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-
-    await query.answer()
-
-    code, options = new_quiz(context)
-
-    await query.edit_message_text(
-        f"🧠 Какому региону соответствует код {code}?",
-        reply_markup=quiz_keyboard(options),
-    )
-
-async def time_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-
-    await query.answer()
-
-    if query.data == "time:off":
-        set_morning(
-            query.message.chat_id,
-            enabled=False
-        )
-
-        await query.edit_message_text(
-            "🔕 Утренняя рассылка отключена."
-        )
-        return
-
-    _, hour, minute = query.data.split(":")
-
-    set_morning(
-        query.message.chat_id,
-        enabled=True,
-        hour=int(hour),
-        minute=int(minute),
-    )
-
-    await query.edit_message_text(
-        f"✅ Готово!\n\n"
-        f"Буду присылать подборку каждый день "
-        f"в {int(hour):02d}:{int(minute):02d} "
-        f"по Москве."
-    )
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    text = update.message.text.strip()
 
-    if text == "🎲 Случайные 5":
-        await now(update, context)
+    if text == "Мяу-Мяу!!!":
+        await begin_game(update, context)
+        return
 
-    elif text == "🔎 Найти код":
-        await update.message.reply_text(
-            "Напиши код, например: 37"
-        )
-        context.user_data["waiting_code"] = True
-
-    elif text == "📋 Все коды":
+    if text == "📋 Все коды":
         await update.message.reply_text(
             all_codes_text(),
             reply_markup=MENU,
         )
+        return
 
-    elif text == "🧠 Викторина":
-        await quiz(update, context)
+    if text == "🔎 Найти код":
+        context.user_data["waiting_code"] = True
+        context.user_data["lookup_mode"] = True
+        await update.message.reply_text("Напиши код, например: 37")
+        return
 
-    elif text == "📊 Статистика":
-        await stats(update, context)
-
-    elif text == "⏰ Настроить время":
-        await time_menu(update, context)
-
-    elif context.user_data.get("waiting_code"):
-        context.user_data.pop("waiting_code", None)
+    if text == "❌ Закончить игру":
+        context.user_data["waiting_code"] = False
+        context.user_data.pop("game_current", None)
+        context.user_data.pop("game_regions", None)
 
         await update.message.reply_text(
-            find_code(text),
+            "Игра остановлена. Когда захочешь продолжить — "
+            "нажми «Мяу-Мяу!!!» 🐈",
+            reply_markup=MENU,
+        )
+        return
+
+    if context.user_data.get("lookup_mode"):
+        context.user_data.pop("lookup_mode", None)
+        context.user_data["waiting_code"] = False
+        code = text.strip()
+
+        if code in REGIONS:
+            await update.message.reply_text(
+                f"🔎 {code} — {REGIONS[code]}",
+                reply_markup=MENU,
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Такой код не найден в базе.",
+                reply_markup=MENU,
+            )
+        return
+
+    if context.user_data.get("game_current"):
+        await handle_code_guess(update, context, text)
+        return
+
+    if text in REGIONS:
+        await update.message.reply_text(
+            f"🔎 {text} — {REGIONS[text]}",
+            reply_markup=MENU,
+        )
+    else:
+        await update.message.reply_text(
+            "Нажми «Мяу-Мяу!!!», чтобы начать игру, "
+            "или «📋 Все коды», чтобы посмотреть список.",
             reply_markup=MENU,
         )
 
-async def morning_job(context: ContextTypes.DEFAULT_TYPE):
-    now_moscow = datetime.now(TZ)
-
-    hour = now_moscow.hour
-    minute = now_moscow.minute
-
-    for chat_id in users_for_time(hour, minute):
-        try:
-            await context.bot.send_message(
-                chat_id,
-                random_message()
-            )
-        except Exception as e:
-            print(e)
 
 def main():
     init_db()
 
     app = Application.builder().token(TOKEN).build()
 
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("code", code_command))
     app.add_handler(
-        CommandHandler("start", start)
-    )
-
-    app.add_handler(
-        CommandHandler("now", now)
-    )
-
-    app.add_handler(
-        CommandHandler("stop", stop)
-    )
-
-    app.add_handler(
-        CommandHandler("code", code_command)
-    )
-
-    app.add_handler(
-        CommandHandler("stats", stats)
-    )
-
-    app.add_handler(
-        CommandHandler("quiz", quiz)
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            time_choice,
-            pattern=r"^time:"
-        )
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            quiz_next,
-            pattern=r"^quiz_next$"
-        )
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            quiz_choice,
-            pattern=r"^quiz:"
-        )
-    )
-
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            text_handler
-        )
-    )
-
-    app.job_queue.run_repeating(
-        morning_job,
-        interval=60,
-        first=5
+        MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler)
     )
 
     print("Bot started")
-
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
